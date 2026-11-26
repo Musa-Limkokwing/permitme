@@ -526,6 +526,9 @@ class PermitMeEnterpriseWorkstation(QWidget):
         self.db = db
         self.cred_service = CredentialService(db, signing_secret)
         self.conn_meta = conn_meta or {}
+        self.current_user: dict[str, Any] = (
+            self.conn_meta.get("user") if isinstance(self.conn_meta.get("user"), dict) else {}
+        )
         self.last_computed_hmac = ""
         self._is_refreshing = False
 
@@ -702,7 +705,21 @@ class PermitMeEnterpriseWorkstation(QWidget):
 
         side_lay.addStretch()
 
-        # Unique, Borderless Profile Card (only card at bottom of sidebar, text fitted inside bounds)
+        # Authenticated Operator Profile Card
+        display_name = (
+            _safe_str(self.current_user.get("full_name")).strip()
+            or _safe_str(self.current_user.get("username")).strip()
+            or "Regulatory Officer"
+        )
+        display_role = (
+            _safe_str(self.current_user.get("role_title")).strip()
+            or "Inspector & Licensing Lead"
+        )
+        display_hub = (
+            _safe_str(self.current_user.get("office_hub")).strip()
+            or "FREETOWN HUB"
+        )
+
         profile_box = QFrame()
         profile_box.setObjectName("SidebarProfileBox")
         profile_box.setMinimumWidth(0)
@@ -717,33 +734,33 @@ class PermitMeEnterpriseWorkstation(QWidget):
 
         prof_text = QVBoxLayout()
         prof_text.setSpacing(2)
-        prof_name = QLabel("Regulatory Officer")
-        prof_name.setMinimumWidth(0)
-        prof_name.setWordWrap(True)
-        prof_name.setStyleSheet("color: #FFFFFF; font-weight: 800; font-size: 12.5px; background: transparent;")
+        self.prof_name_lbl = QLabel(display_name)
+        self.prof_name_lbl.setMinimumWidth(0)
+        self.prof_name_lbl.setWordWrap(True)
+        self.prof_name_lbl.setStyleSheet("color: #FFFFFF; font-weight: 800; font-size: 12.5px; background: transparent;")
 
-        prof_role = QLabel("Inspector & Licensing Lead")
-        prof_role.setMinimumWidth(0)
-        prof_role.setWordWrap(True)
-        prof_role.setStyleSheet("color: #5EEAD4; font-size: 10.5px; font-weight: 600; background: transparent;")
+        self.prof_role_lbl = QLabel(display_role)
+        self.prof_role_lbl.setMinimumWidth(0)
+        self.prof_role_lbl.setWordWrap(True)
+        self.prof_role_lbl.setStyleSheet("color: #5EEAD4; font-size: 10.5px; font-weight: 600; background: transparent;")
 
-        prof_text.addWidget(prof_name)
-        prof_text.addWidget(prof_role)
+        prof_text.addWidget(self.prof_name_lbl)
+        prof_text.addWidget(self.prof_role_lbl)
 
         prof_top_row.addWidget(avatar_widget, 0, Qt.AlignmentFlag.AlignVCenter)
         prof_top_row.addLayout(prof_text, 1)
         prof_outer.addLayout(prof_top_row)
 
-        hub_pill = QLabel("ON DUTY • FREETOWN HUB")
-        hub_pill.setMinimumWidth(0)
-        hub_pill.setWordWrap(True)
-        hub_pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hub_pill.setStyleSheet(
+        self.hub_pill_lbl = QLabel(f"ON DUTY • {display_hub.upper()}")
+        self.hub_pill_lbl.setMinimumWidth(0)
+        self.hub_pill_lbl.setWordWrap(True)
+        self.hub_pill_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.hub_pill_lbl.setStyleSheet(
             "background-color: #5EEAD4; color: #042F2E; "
             "font-size: 9px; font-weight: 800; letter-spacing: 0.4px; "
             "border: none; border-radius: 7px; padding: 4px 6px;"
         )
-        prof_outer.addWidget(hub_pill)
+        prof_outer.addWidget(self.hub_pill_lbl)
         side_lay.addWidget(profile_box)
 
         shell.addWidget(sidebar)
@@ -853,7 +870,7 @@ class PermitMeEnterpriseWorkstation(QWidget):
         footer.setObjectName("StatusFooter")
         f_lay = QHBoxLayout(footer)
         f_lay.setContentsMargins(26, 8, 26, 8)
-        self.status_label = QLabel("Ready.")
+        self.status_label = QLabel(f"Signed in as {display_name} ({display_hub}).")
         self.status_label.setStyleSheet("color: #E2E8F0; font-size: 12px; font-weight: 500;")
         f_lay.addWidget(self.status_label)
         right_col.addWidget(footer)
@@ -1324,7 +1341,7 @@ class PermitMeEnterpriseWorkstation(QWidget):
         }
         next_status = next_status_map.get(outcome, "under_review")
         self.pending_action_lbl.setText(
-            f"Upcoming on submit: App {app_label} → {next_status} via sp_record_inspection."
+            f"Upcoming on submit: App {app_label} -> {next_status} via sp_record_inspection."
         )
 
     def _on_sla_row_clicked(self, row: int, _col: int):

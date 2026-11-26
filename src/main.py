@@ -1,29 +1,57 @@
+import os
 import sys
-from PyQt6.QtWidgets import QApplication, QMessageBox
-from src.config.db_config import describe_connection, get_signing_secret, get_supabase_pooler_uri
+from pathlib import Path
+from dotenv import load_dotenv
+from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
 from database.db_manager import PermitMeDatabaseManager
+from src.ui.login_dialog import LoginDialog
 from src.ui.workstation_app import PermitMeEnterpriseWorkstation
 
 
-def main():
-    app = QApplication(sys.argv)
-    try:
-        pooler_uri = get_supabase_pooler_uri()
-        signing_secret = get_signing_secret()
-        conn_meta = describe_connection(pooler_uri)
-        db = PermitMeDatabaseManager(pooler_uri)
-    except Exception as exc:
-        QMessageBox.critical(None, "Startup Configuration Error", str(exc))
-        sys.exit(1)
+def main() -> int:
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=True)
 
-    window = PermitMeEnterpriseWorkstation(
-        db=db,
-        signing_secret=signing_secret,
-        conn_meta=conn_meta,
+    app = QApplication(sys.argv)
+    app.setApplicationName("PermitMe — Civic Licensing & Regulatory Suite")
+
+    db_url = (
+        os.getenv("SUPABASE_POOLER_URI", "").strip()
+        or os.getenv("DATABASE_URL", "").strip()
     )
+    signing_secret = os.getenv(
+        "PERMITME_SIGNING_SECRET", "permitme-default-signing-secret"
+    ).strip()
+
+    if not db_url:
+        QMessageBox.critical(
+            None,
+            "Configuration Missing",
+            "Neither SUPABASE_POOLER_URI nor DATABASE_URL is set in .env.",
+        )
+        return 1
+
+    try:
+        db = PermitMeDatabaseManager(db_url)
+    except Exception as exc:
+        QMessageBox.critical(
+            None,
+            "Database Connection Failed",
+            f"Could not connect to PostgreSQL / Supabase:\n{exc}",
+        )
+        return 1
+
+    login_dlg = LoginDialog(db)
+    if login_dlg.exec() != QDialog.DialogCode.Accepted or not login_dlg.authenticated_user:
+        return 0
+
+    conn_meta = {
+        "user": login_dlg.authenticated_user,
+    }
+
+    window = PermitMeEnterpriseWorkstation(db, signing_secret, conn_meta)
     window.show()
-    sys.exit(app.exec())
+    return app.exec()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
